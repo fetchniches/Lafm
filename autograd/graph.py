@@ -92,7 +92,6 @@ class comp_graph(object):
         
         return inner
 
-
     @property
     def nodes(self):
         return self._nodes
@@ -142,7 +141,7 @@ class node(object):
 
     @comp_graph.no_record
     def backward(self):
-        raise NotImplementedError
+        raise NotImplemented
 
 class _data_node(node):
     NODE_COUNTS = 0
@@ -161,11 +160,16 @@ class _data_node(node):
 
     @comp_graph.no_record
     def backward(self):
+        # init grad val
+        if self._data.with_grad and self._data._grad is None:
+            self._data._grad = np.zeros_like(self._data)
         # leaf node
         if len(self._outs) == 0:
             if self._data.size != 1:
                 raise TypeError("Only constant could be used to start calculating gradient.")
             self._data._grad = ones_like(self._data)
+        if len(self._ins) == 0 and not self._data.with_grad:
+            pass
         # non-leaf node
         else:
             # iterate each operator type

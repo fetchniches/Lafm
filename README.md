@@ -1,12 +1,57 @@
-# LAF(**L**ow-performance **A**utograd **F**ramework)
+# LAFM
 
-## Developer Mannual
+**L**ow-performance **A**utograd **F**ramework for **M**achine learning algorithm. **Lafm** uses `numpy` as the backend and all matrix calculations are done by it.
 
-### Adding gradient function
+## User Guide
 
-`autograd`: The implemtation of low-performance autograd.
+Here is a test code below.
 
-## TODO
+```python
+import lafm as lm
 
-- [ ] topology sort
-- [ ] non-leaf gradient clean
+# creating array with gradient
+a = lm.array([[1, 2.4, 3], [2.5, 3, 1], [2, 2, 1.6]], with_grad=True)
+b = lm.array([[2.3, 1.1, 3], [3, 3, 2.]], with_grad=True)
+c = lm.array([[2, 3, 1], [4, 1, 2.], [1, 1, 1]], with_grad=True)
+# initialize default graph and starting recording
+graph = lm.comp_graph.get_default_graph()
+# computation process
+d = (a - c) @ b.T
+d = d / lm.array([2])
+d = d * lm.array([1.5])
+result = d.sum()
+# backward for gradient
+result.backward()
+# print gradient
+print(a._grad)
+print(b._grad)
+print(c._grad)
+```
+
+## Support Operation
+
+- [x] addition
+- [x] subtraction
+- [x] multiply (element-wise)
+- [x] division (element-wise)
+- [ ] multiply (boardcast)
+- [ ] division (boardcast)
+- [x] matrix multiply
+- [x] sum (reduce all dimension)
+- [ ] primary function
+- [ ] in-place operation
+
+
+## Optimization
+
+- [ ] topology sort for computational graph
+
+- [ ] cleaning non-leaf node's gradient
+
+- [ ] number converting to `Mat` implicitly
+
+  
+
+## Implementation Details
+
+coming soon...

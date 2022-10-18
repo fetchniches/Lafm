@@ -1,4 +1,4 @@
-# Low-performance Autograd Framework (LAF)
-# LAf is Autograd framework
+# Low-performance Autograd Framework for Machine learning algorithm
+# author: fetchniches
 from .linalg import *
 from .autograd import *

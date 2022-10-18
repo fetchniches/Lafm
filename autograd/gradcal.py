@@ -19,19 +19,11 @@ _operator_mapping = {
     '__add__': _supported_operator.ADD,
     '__sub__': _supported_operator.SUB,
     '__mul__': _supported_operator.MUL,
-    '__div__': _supported_operator.DIV,
+    '__truediv__': _supported_operator.DIV,
     '__matmul__': _supported_operator.MAT_MUL,
     'sum': _supported_operator.SUM,
     'T': _supported_operator.T,
 }
-
-# def _add_grad(input_X: Mat, input_Y: Mat, result_Z: Mat): ...
-# def _sub_grad(input_X: Mat, input_Y: Mat, result_Z: Mat): ...
-# def _mul_grad(input_X: Mat, input_Y: Mat, result_Z: Mat): ...
-# def _div_grad(input_X: Mat, input_Y: Mat, result_Z: Mat): ...
-# def _matmul_grad(input_X: Mat, input_Y: Mat, result_Z: Mat): ...
-# def _transpose_grad(input_X: Mat, result_Z: Mat): ...
-# def _sum_grad(input_X: Mat, result_Z: Mat): ...
 
 def _add_grad(input_X: Mat, input_Y: Mat, result_Z: Mat, cal_grad: int):
     for index, inp in enumerate((input_X, input_Y)):
@@ -49,14 +41,15 @@ def _mul_grad(input_X: Mat, input_Y: Mat, result_Z: Mat, cal_grad: int):
     inputs = (input_X, input_Y)
     for index, inp in enumerate(inputs):
         if inp.size == 1 and index == cal_grad:
-            inp._grad += inputs[index-1].reshape(-1) @ result_Z._grad.reshape(-1).T
+            inp._grad += result_Z._grad.reshape(-1) @ inputs[index-1].reshape(-1).T
         elif index == cal_grad:
             shape = (*result_Z.shape, *inp.shape)
             gradient = np.zeros(shape, dtype=inp.dtype)
             for i in range(inp.shape[0]):
                 for j in range(inp.shape[1]):
                     gradient[i, j, i, j] = inputs[index-1]
-            inp._grad += (result_Z._grad.reshape(-1) * gradient).reshape(inp.shape)
+            vectorize_grad = gradient.reshape(reduce(mul, gradient.shape[:2]), reduce(mul, gradient.shape[2:]))
+            inp._grad += (result_Z._grad.reshape(1, -1) @ vectorize_grad).reshape(inp.shape)
 
 def _div_grad(input_X: Mat, input_Y: Mat, result_Z: Mat, cal_grad: int):
     # NOTE: only element-wise division is supported.
@@ -65,36 +58,41 @@ def _div_grad(input_X: Mat, input_Y: Mat, result_Z: Mat, cal_grad: int):
     for index, inp in enumerate(inputs):
         # one element
         if inp.size == 1 and index == cal_grad:
-            inp._grad += - np.sum(inputs[index-1] / inp ** 2)
+            vectorize_grad =  (- inputs[index-1] / inp ** 2).reshape(-1, 1)
+            inp._grad += result_Z._grad.reshape(1, -1) @ vectorize_grad
         elif index == cal_grad:
-            inp._grad += np.ones(inp.shape, dtype=inp.dtype) / inputs[index-1]
+            shape = (*result_Z.shape, *inp.shape)
+            gradient = np.zeros(shape, dtype=inp.dtype)
+            for i in range(inp.shape[0]):
+                for j in range(inp.shape[1]):
+                    gradient[i, j, i, j] = 1 / inputs[index-1]
+            vectorize_grad = gradient.reshape(reduce(mul, gradient.shape[:2]), reduce(mul, gradient.shape[2:]))
+            inp._grad += (result_Z._grad.reshape(1, -1) @ vectorize_grad).reshape(inp.shape)
 
 def _matmul_grad(input_X: Mat, input_Y: Mat, result_Z: Mat, cal_grad: int):
     if cal_grad == 0 and input_X.with_grad:
         shape = (*result_Z.shape, *input_X.shape)
         grad = np.zeros(shape, dtype=input_X.dtype)
-        # 
         for i in range(result_Z.shape[0]):
             for j in range(result_Z.shape[1]):
                 grad[i, j, i] += input_Y[:, j] 
         tmp_grad = grad.reshape(reduce(mul, result_Z.shape), reduce(mul, input_X.shape))
-        input_X._grad = (result_Z._grad.reshape(-1) @ tmp_grad).reshape(input_X.shape)
+        input_X._grad += (result_Z._grad.reshape(-1) @ tmp_grad).reshape(input_X.shape)
     if cal_grad == 1 and input_Y.with_grad:
         shape = (*result_Z.shape, *input_Y.shape)
         grad = np.zeros(shape, dtype=input_Y.dtype)
-        # 
         for i in range(result_Z.shape[0]):
             for j in range(result_Z.shape[1]):
                 grad[i, j, :, j] += input_X[i, :] 
         tmp_grad = grad.reshape(reduce(mul, result_Z.shape), reduce(mul, input_Y.shape))
-        input_Y._grad = (result_Z._grad.reshape(-1) @ tmp_grad).reshape(input_Y.shape)
+        input_Y._grad += (result_Z._grad.reshape(-1) @ tmp_grad).reshape(input_Y.shape)
 
 def _transpose_grad(input_X: Mat, result_Z: Mat, cal_grad: int):
-    input_X._grad = result_Z._grad.transpose()
+    input_X._grad += result_Z._grad.transpose()
 
 def _sum_grad(input_X: Mat, result_Z: Mat, cal_grad: int):
     # NOTE: all dim reduceds
-    input_X._grad = np.ones_like(input_X) * result_Z._grad
+    input_X._grad += np.ones_like(input_X) * result_Z._grad
 
 _op_grad_mapping = {
     _supported_operator.ADD: _add_grad,
