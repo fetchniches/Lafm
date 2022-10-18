@@ -5,3 +5,8 @@
 ### Adding gradient function
 
 `autograd`: The implemtation of low-performance autograd.
+
+## TODO
+
+- [ ] topology sort
+- [ ] non-leaf gradient clean
