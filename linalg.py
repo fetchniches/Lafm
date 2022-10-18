@@ -29,6 +29,7 @@ class Mat(np.ndarray):
         except AttributeError:
             raise RuntimeError("Current data has no node linked.")
 
+
 def mat_wrapper(func):
     def inner(*args, **kwargs):
         mat_kwarg_keys = ["with_grad"]

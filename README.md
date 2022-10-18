@@ -1,3 +1,7 @@
 # LAF(**L**ow-performance **A**utograd **F**ramework)
 
-introduction coming soon.
+## Developer Mannual
+
+### Adding gradient function
+
+`autograd`: The implemtation of low-performance autograd.
