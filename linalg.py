@@ -29,6 +29,8 @@ class Mat(np.ndarray):
         except AttributeError:
             raise RuntimeError("Current data has no node linked.")
 
+    def norm(self, p): ...
+
 
 def mat_wrapper(func):
     def inner(*args, **kwargs):

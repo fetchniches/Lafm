@@ -40,7 +40,9 @@ print(c._grad)
 - [x] sum (reduce all dimension)
 - [ ] primary function
 - [ ] in-place operation
-
+- [x] power operation (operator overload, only support gradient for base)
+- [x] absolute value
+- [x] p-norm (combination of the above two)
 
 ## Optimization
 
@@ -48,9 +50,7 @@ print(c._grad)
 
 - [ ] cleaning non-leaf node's gradient
 
-- [ ] number converting to `Mat` implicitly
-
-  
+- [ ] computational boardcast
 
 ## Implementation Details
 

@@ -14,6 +14,8 @@ class _supported_operator(Enum):
     MAT_MUL = 4
     SUM = 5
     T = 6
+    POW = 7
+    ABS = 8
 
 _operator_mapping = {
     '__add__': _supported_operator.ADD,
@@ -23,6 +25,8 @@ _operator_mapping = {
     '__matmul__': _supported_operator.MAT_MUL,
     'sum': _supported_operator.SUM,
     'T': _supported_operator.T,
+    '__pow__': _supported_operator.POW,
+    '__abs__': _supported_operator.ABS
 }
 
 def _add_grad(input_X: Mat, input_Y: Mat, result_Z: Mat, cal_grad: int):
@@ -70,6 +74,7 @@ def _div_grad(input_X: Mat, input_Y: Mat, result_Z: Mat, cal_grad: int):
             inp._grad += (result_Z._grad.reshape(1, -1) @ vectorize_grad).reshape(inp.shape)
 
 def _matmul_grad(input_X: Mat, input_Y: Mat, result_Z: Mat, cal_grad: int):
+    # TODO: vector @ matrix
     if cal_grad == 0 and input_X.with_grad:
         shape = (*result_Z.shape, *input_X.shape)
         grad = np.zeros(shape, dtype=input_X.dtype)
@@ -94,6 +99,27 @@ def _sum_grad(input_X: Mat, result_Z: Mat, cal_grad: int):
     # NOTE: all dim reduceds
     input_X._grad += np.ones_like(input_X) * result_Z._grad
 
+def _pow_grad(input_X: Mat, input_Y: Mat, result_Z: Mat, cal_grad: int):
+    if input_X.size == 1:
+        input_X._grad += input_Y * input_X ** (input_Y - 1)
+    else:
+        shape = (*result_Z.shape, *input_X.shape)
+        gradient = np.zeros(shape, dtype=input_X.dtype)
+        for i in range(input_X.shape[0]):
+            for j in range(input_X.shape[1]):
+                gradient[i, j, i, j] = input_Y * input_X[i, j] ** (input_Y - 1)
+        vectorize_grad = gradient.reshape(reduce(mul, gradient.shape[:2]), reduce(mul, gradient.shape[2:]))
+        input_X._grad += (result_Z._grad.reshape(1, -1) @ vectorize_grad).reshape(input_X.shape)
+
+def _abs_gard(input_X: Mat, result_Z: Mat, cal_grad: int):
+    shape = (*result_Z.shape, *input_X.shape)
+    gradient = np.zeros(shape, dtype=input_X.dtype)
+    for i in range(input_X.shape[0]):
+        for j in range(input_X.shape[1]):
+            gradient[i, j, i, j] = 1 if input_X[i, j] > 0 else -1
+    vectorize_grad = gradient.reshape(reduce(mul, gradient.shape[:2]), reduce(mul, gradient.shape[2:]))
+    input_X._grad += (result_Z._grad.reshape(1, -1) @ vectorize_grad).reshape(input_X.shape)
+
 _op_grad_mapping = {
     _supported_operator.ADD: _add_grad,
     _supported_operator.SUB: _sub_grad,
@@ -101,7 +127,9 @@ _op_grad_mapping = {
     _supported_operator.DIV: _div_grad,
     _supported_operator.MAT_MUL: _matmul_grad,
     _supported_operator.SUM: _sum_grad,
-    _supported_operator.T: _transpose_grad
+    _supported_operator.T: _transpose_grad,
+    _supported_operator.POW: _pow_grad,
+    _supported_operator.ABS: _abs_gard
 }
 
 def _calculate_gradient(inputs, output, op_type: _supported_operator, cal_grad: int):

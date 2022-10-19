@@ -5,17 +5,17 @@ from ..linalg import ones_like, Mat
 from .gradcal import _calculate_gradient, _operator_mapping, _supported_operator
 
 ##### operation override #####
-def _binary_operator_wrapper(op):
-    def _inner(self, other):
-        res = op(self, other)
+def _operator_wrapper(op):
+    def _inner(*args):
+        res = op(*args)
         if comp_graph._graph_recording:
             res.with_grad = True
             # create node
             g = comp_graph.get_default_graph()
-            operands = [g.attach_node(data, is_data=True) for data in (self, other, res)]
+            operands = [g.attach_node(data, is_data=True) for data in (*args, res)]
             operator = g.attach_node(op.__name__, is_data=False)
             # connect
-            for node in operands[:2]:
+            for node in operands[:-1]:
                 node.link_to(operator)
             operator.link_to(operands[-1])
 
@@ -23,9 +23,10 @@ def _binary_operator_wrapper(op):
     return _inner
 
 # TODO: dim args
-def _override_sum(self, *args, **kwargs):
+def _overload_sum(self, *args, **kwargs):
     res = super(Mat, self).sum()
     if comp_graph._graph_recording:
+        res.with_grad = True
         graph = comp_graph.get_default_graph()
         op_node = graph.attach_node('sum', is_data=False)
         data_nodes = graph.attach_node(self), graph.attach_node(res)
@@ -34,26 +35,33 @@ def _override_sum(self, *args, **kwargs):
 
     return res
 
-def _override_T(self):
-    trans = self.transpose()
+def _overload_T(self):
+    value = self.transpose()
     if comp_graph._graph_recording:
-        trans.with_grad = True
+        value.with_grad = True
         graph = comp_graph.get_default_graph()
         op_node = graph.attach_node('T', is_data=False)
-        data_nodes = graph.attach_node(self), graph.attach_node(trans)
+        data_nodes = graph.attach_node(self), graph.attach_node(value)
         data_nodes[0].link_to(op_node)
         op_node.link_to(data_nodes[1])
 
-    return trans
+    return value
 
-Mat.__add__ = _binary_operator_wrapper(Mat.__add__)
-Mat.__sub__ = _binary_operator_wrapper(Mat.__sub__)
-Mat.__mul__ = _binary_operator_wrapper(Mat.__mul__) 
-Mat.__truediv__ = _binary_operator_wrapper(Mat.__truediv__)
-Mat.__matmul__ = _binary_operator_wrapper(Mat.__matmul__)
-Mat.sum = _override_sum
-Mat.T = property(_override_T)
+def _overload_norm(self, p):
+    value = (self ** p).sum() ** (1/p)
+    
+    return value
 
+Mat.__add__ = _operator_wrapper(Mat.__add__)
+Mat.__sub__ = _operator_wrapper(Mat.__sub__)
+Mat.__mul__ = _operator_wrapper(Mat.__mul__) 
+Mat.__truediv__ = _operator_wrapper(Mat.__truediv__)
+Mat.__matmul__ = _operator_wrapper(Mat.__matmul__)
+Mat.sum = _overload_sum
+Mat.T = property(_overload_T)
+Mat.__pow__ = _operator_wrapper(Mat.__pow__)
+Mat.__abs__ = _operator_wrapper(Mat.__abs__)
+Mat.norm = _overload_norm
 
 
 class comp_graph(object):
@@ -109,6 +117,8 @@ class comp_graph(object):
 
     def attach_node(self, op_or_value: Union[Mat, str], is_data: bool = True):
         if is_data:
+            if not isinstance(op_or_value, Mat):
+                op_or_value = Mat(op_or_value, with_grad=True)
             try:
                 node = op_or_value._node
             except AttributeError:
