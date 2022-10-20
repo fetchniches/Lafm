@@ -32,7 +32,10 @@ _operator_mapping = {
 def _add_grad(input_X: Mat, input_Y: Mat, result_Z: Mat, cal_grad: int):
     for index, inp in enumerate((input_X, input_Y)):
         if inp.with_grad and index == cal_grad:
-            inp._grad += result_Z._grad
+            if inp.size != 1:
+                inp._grad += result_Z._grad
+            else:
+                inp._grad += np.sum(result_Z._grad)
 
 def _sub_grad(input_X: Mat, input_Y: Mat, result_Z: Mat, cal_grad: int):
     for index, (inp, sign) in enumerate(zip((input_X, input_Y), (1, -1))):

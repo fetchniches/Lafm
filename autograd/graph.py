@@ -74,7 +74,6 @@ class comp_graph(object):
 
     def set_default_graph(self):
         comp_graph.DEFAULT_GRAPH = self
-        comp_graph._graph_recording = True
 
     @staticmethod
     def clean():
@@ -85,12 +84,11 @@ class comp_graph(object):
     def get_default_graph():
         if comp_graph.DEFAULT_GRAPH is None:
             comp_graph.DEFAULT_GRAPH = comp_graph()
-        comp_graph._graph_recording = True
         return comp_graph.DEFAULT_GRAPH
 
     @staticmethod
     def no_record(func):
-        
+    
         def inner(*args, **kwargs):
             gr = comp_graph._graph_recording
             comp_graph._graph_recording = False
