@@ -105,8 +105,6 @@ for epoch, loss in LR.train(Xs, ys, 10, lr=.01):
 
 ## Bugs
 
-- [ ] `__add__` function error when compute gradient in linear regression.
-
 ## Implementation Details
 
 coming soon...
