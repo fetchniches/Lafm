@@ -87,7 +87,7 @@ for epoch, loss in LR.train(Xs, ys, 10, lr=.01):
 
 ## Optimization
 
-- [ ] topological sorting for computational graph
+- [x] topological sorting for computational graph (not tested yet)
 
 - [ ] cleaning non-leaf node's gradient
 
@@ -97,7 +97,7 @@ for epoch, loss in LR.train(Xs, ys, 10, lr=.01):
 
 ## Basic Features
 
-- [ ] gradient clear
+- [x] gradient clear
 
 - [ ] dynamic graph (clear graph in backward step?)
 
