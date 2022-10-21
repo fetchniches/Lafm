@@ -1,4 +1,4 @@
-from typing import Sequence, Union
+from typing import List, Mapping, Sequence, Union
 import numpy as np
 
 from ..linalg import ones_like, Mat
@@ -67,16 +67,19 @@ Mat.norm = _overload_norm
 class comp_graph(object):
     DEFAULT_GRAPH = None
     graphs = []
+    ctx_stack = []
     _graph_recording = False
     def __init__(self):
-        self._nodes = {}
+        self._nodes: Mapping[str, node] = {}
+        self._need_sort = True
+        self._sorted_nodes = []
         comp_graph.graphs.append(self)
 
     def set_default_graph(self):
         comp_graph.DEFAULT_GRAPH = self
 
     @staticmethod
-    def clean():
+    def clean_state():
         comp_graph.DEFAULT_GRAPH = None
         comp_graph._graph_recording = False
 
@@ -88,14 +91,12 @@ class comp_graph(object):
 
     @staticmethod
     def no_record(func):
-    
         def inner(*args, **kwargs):
             gr = comp_graph._graph_recording
             comp_graph._graph_recording = False
             ret = func(*args, **kwargs)
             comp_graph._graph_recording = gr
             return ret 
-        
         return inner
 
     @property
@@ -103,15 +104,13 @@ class comp_graph(object):
         return self._nodes
 
     def __enter__(self):
-        self.last_graph = comp_graph.DEFAULT_GRAPH
+        comp_graph.ctx_stack.append(comp_graph.DEFAULT_GRAPH)
         comp_graph.DEFAULT_GRAPH = self
         comp_graph._graph_recording = True
 
     def __exit__(self, *args, **kwargs):
-        comp_graph.DEFAULT_GRAPH = self.last_graph
-        self.last_graph = None
-        if comp_graph.DEFAULT_GRAPH is None:
-            comp_graph._graph_recording = False
+        comp_graph.DEFAULT_GRAPH = comp_graph.ctx_stack.pop()
+        comp_graph._graph_recording = False
 
     def attach_node(self, op_or_value: Union[Mat, str], is_data: bool = True):
         if is_data:
@@ -132,12 +131,48 @@ class comp_graph(object):
 
         return node
 
+    def clean_grad(self):
+        for nname in self._nodes:
+            _node = self._nodes[nname]
+            if isinstance(_node, _data_node):
+                if _node._data.with_grad:
+                    _node._data._grad *= 0
+    
+    def clear(self):
+        for nname in self._nodes:
+            _node = self._nodes[nname]
+            _node._ins.clear()
+            _node._outs.clear()
+            if isinstance(_node, _data_node) and _node._data.with_grad:
+                _node._data._grad *= 0 
+        self._nodes = {}
+
+
+    def topo_sort(self):
+        topo_nodes = {}
+        for key in self._nodes:
+            nn = self._nodes[key]
+            topo_nodes.setdefault(nn._id, [nn, len(nn._ins)])
+        self._sorted_nodes.clear()
+        while len(topo_nodes) > 0:
+            for key in topo_nodes:
+                if topo_nodes[key][1] == 0:
+                    del_node = topo_nodes[key][0]
+                    # update out node
+                    for out_node in del_node._outs:
+                        topo_nodes[out_node._id][1] -= 1
+                    del topo_nodes[key]
+                    break
+            self._sorted_nodes.append(del_node)
+            
+                    
+
 class node(object):
 
     def __init__(self, identifier: str, context: comp_graph):
         self._id = identifier
-        self._ins: Sequence[node] = []
-        self._outs: Sequence[node] = []
+        self._ins: List[node] = []
+        self._outs: List[node] = []
         if context is None:
             context = comp_graph.get_default_graph()
         self._ctx = context
@@ -149,6 +184,10 @@ class node(object):
 
     @comp_graph.no_record
     def backward(self):
+        raise NotImplemented
+
+    @comp_graph.no_record
+    def forward(self):
         raise NotImplemented
 
 class _data_node(node):
@@ -193,6 +232,7 @@ class _data_node(node):
         for op_node in self._ins:
             op_node.backward()
 
+
 class _operator_node(node):
     NODE_COUNTS = 0
     def __init__(self, op: _supported_operator, context: comp_graph = None, **kwargs):
@@ -218,4 +258,3 @@ class _operator_node(node):
         for data_node in self._ins:
             data_node.backward()
 
-    

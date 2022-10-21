@@ -4,7 +4,7 @@
 
 ## User Guide
 
-Here is a test code below.
+Here is a test code for autograd below:
 
 ```python
 import lafm as lm
@@ -26,6 +26,35 @@ result.backward()
 print(a._grad)
 print(b._grad)
 print(c._grad)
+```
+
+Here is a Linear Regression example code:
+
+```python
+import lafm
+import numpy as np
+import matplotlib.pyplot as plt
+
+# generate fake data
+true_weight = np.array([2.2]).reshape(-1, 1)
+true_bias = np.array([3.2])
+linear_gen = lafm.faker.data_gen.Linear(true_weight, true_bias)
+Xs, ys = linear_gen.gen(-5, 5, 24)
+# initialize linear regression model
+LR = lafm.linreg.LinearRegressor(dims=1)
+disp_X = np.linspace(-5, 5, 2).reshape(-1, 1)
+# training step
+for epoch, loss in LR.train(Xs, ys, 10, lr=.01):
+    disp_y = disp_X @ LR.weight + LR.bias
+    # plotting result
+    plt.plot(disp_X, disp_y)
+    plt.scatter(Xs, ys, c='orange')
+    plt.ylabel('y')
+    plt.xlabel('X')
+    plt.xlim(-5, 5)
+    plt.ylim(-10, 10)
+    plt.title('Epoch {} Loss: {:.2f}'.format(epoch, loss))
+    plt.show()
 ```
 
 ## Support Operation
@@ -58,15 +87,21 @@ print(c._grad)
 
 ## Optimization
 
-- [ ] topology sort for computational graph
+- [ ] topological sorting for computational graph
 
 - [ ] cleaning non-leaf node's gradient
 
 - [ ] computational boardcast
 
+- [ ] topological sorting in forward step
+
 ## Basic Features
 
 - [ ] gradient clear
+
+- [ ] dynamic graph (clear graph in backward step?)
+
+- [ ] static graph
 
 ## Bugs
 

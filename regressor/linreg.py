@@ -15,17 +15,20 @@ class LinearRegressor:
         self.weight = weight_init
         self.bias = bias_init
         self.graph = comp_graph.get_default_graph()
+        
     
-    def train(self, Xs, ys, epochs: int = 10, lr: float = .1):
+    def train(self, Xs, ys, epochs: int = 10, lr: float = .05):
         ys = ys.reshape(-1, 1)
         Xs = Xs.view(Mat)
         ys = ys.view(Mat)
-        with self.graph:
-            loss = (Xs @ self.weight + self.bias - ys).norm(p=2)
+
         for epoch in range(epochs):
+            with self.graph:
+                loss = (Xs @ self.weight + self.bias - ys).norm(p=2)
             loss.backward()
             # grad cal here
             self.step(lr)
+            self.graph.clear()
             yield epoch, loss
 
 
