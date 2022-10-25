@@ -77,7 +77,7 @@ for epoch, loss in LR.train(Xs, ys, 20, lr=.05):
 
 - [x] sum (reduce all dimension)
 
-- [ ] primary function
+- [ ] elementary function
 
 - [ ] in-place operation
 
@@ -109,7 +109,11 @@ for epoch, loss in LR.train(Xs, ys, 20, lr=.05):
 
 - [x] static graph
 
-## Bugs
+## Next Steps
+
+- [ ] elementary function support
+
+- [ ] kernel methods
 
 ## Implementation Details
 
