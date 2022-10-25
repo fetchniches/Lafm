@@ -8,7 +8,7 @@ class Mat(np.ndarray):
             inputs_array = np.asarray(inputs_array)
         obj = inputs_array.view(cls)
         obj.with_grad = with_grad
-        obj._grad = None
+        obj.grad = None
         return obj
 
     def __array_finalize__(self, obj):
@@ -21,7 +21,7 @@ class Mat(np.ndarray):
         else:
             self.with_grad = obj.with_grad
 
-        self._grad = None
+        self.grad = None
 
     def backward(self):
         try:

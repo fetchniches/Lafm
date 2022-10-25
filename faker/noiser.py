@@ -1,5 +1,5 @@
+import numpy as np
 from abc import ABC, abstractmethod
-import random
 
 class BasicNoise(ABC):
 
@@ -14,9 +14,8 @@ class GaussianNoise(BasicNoise):
         self.mu = mu
         self.sigma = sigma
 
-
     def apply(self, data):
-        return data + random.gauss(self.mu, self.sigma)
+        return data + np.random.randn(*data.shape) * self.sigma + self.mu
 
 class ConstantNoise(BasicNoise):
 

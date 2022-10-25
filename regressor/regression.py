@@ -21,20 +21,21 @@ class LinearRegressor:
         ys = ys.reshape(-1, 1)
         Xs = Xs.view(Mat)
         ys = ys.view(Mat)
-
+        with self.graph:
+            loss = (Xs @ self.weight + self.bias - ys).norm(p=2)
         for epoch in range(epochs):
-            with self.graph:
-                loss = (Xs @ self.weight + self.bias - ys).norm(p=2)
-            loss.backward()
-            # grad cal here
+            self.graph.backward()
             self.step(lr)
-            self.graph.clear()
+            self.graph.clean_grad()
+            self.graph.forward()
             yield epoch, loss
 
 
     def step(self, lr: float):
-        self.weight -= self.weight._grad * lr
-        self.bias -= self.bias._grad * lr
+        self.weight -= self.weight.grad * lr
+        self.bias -= self.bias.grad * lr
+
+
 
 if __name__ == '__main__':
     ...

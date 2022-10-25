@@ -2,9 +2,18 @@ from typing import List, Mapping, Sequence, Union
 import numpy as np
 
 from ..linalg import ones_like, Mat
-from .gradcal import _calculate_gradient, _operator_mapping, _supported_operator
+from .gradcal import (
+    _backward_calculate, 
+    _forward_calculate,
+    _operator_mapping, 
+    _supported_operator, 
+    default_dtype
+)
 
-##### operation override #####
+#############################
+##### operator overload #####
+#############################
+
 def _operator_wrapper(op):
     def _inner(*args):
         res = op(*args)
@@ -52,6 +61,7 @@ def _overload_norm(self, p):
     
     return value
 
+
 Mat.__add__ = _operator_wrapper(Mat.__add__)
 Mat.__sub__ = _operator_wrapper(Mat.__sub__)
 Mat.__mul__ = _operator_wrapper(Mat.__mul__) 
@@ -63,6 +73,19 @@ Mat.__pow__ = _operator_wrapper(Mat.__pow__)
 Mat.__abs__ = _operator_wrapper(Mat.__abs__)
 Mat.norm = _overload_norm
 
+###############################
+##### computational graph #####
+###############################
+
+
+def no_record(func):
+    def inner(*args, **kwargs):
+        gr = comp_graph._graph_recording
+        comp_graph._graph_recording = False
+        ret = func(*args, **kwargs)
+        comp_graph._graph_recording = gr
+        return ret 
+    return inner
 
 class comp_graph(object):
     DEFAULT_GRAPH = None
@@ -72,7 +95,7 @@ class comp_graph(object):
     def __init__(self):
         self._nodes: Mapping[str, node] = {}
         self._need_sort = True
-        self._sorted_nodes = []
+        self._sorted_nodes: List[_operator_node] = []
         comp_graph.graphs.append(self)
 
     def set_default_graph(self):
@@ -88,16 +111,6 @@ class comp_graph(object):
         if comp_graph.DEFAULT_GRAPH is None:
             comp_graph.DEFAULT_GRAPH = comp_graph()
         return comp_graph.DEFAULT_GRAPH
-
-    @staticmethod
-    def no_record(func):
-        def inner(*args, **kwargs):
-            gr = comp_graph._graph_recording
-            comp_graph._graph_recording = False
-            ret = func(*args, **kwargs)
-            comp_graph._graph_recording = gr
-            return ret 
-        return inner
 
     @property
     def nodes(self):
@@ -127,7 +140,8 @@ class comp_graph(object):
                 raise RuntimeWarning("Operator {} does not support now.".format(op_or_value))
             node = _operator_node(op, self)
 
-        self._nodes.setdefault(node._id, node)
+        self._need_sort = True
+        # self._nodes.setdefault(node._id, node) attached in _node `__init__`
 
         return node
 
@@ -136,7 +150,7 @@ class comp_graph(object):
             _node = self._nodes[nname]
             if isinstance(_node, _data_node):
                 if _node._data.with_grad:
-                    _node._data._grad *= 0
+                    _node._data.grad *= 0
     
     def clear(self):
         for nname in self._nodes:
@@ -144,11 +158,12 @@ class comp_graph(object):
             _node._ins.clear()
             _node._outs.clear()
             if isinstance(_node, _data_node) and _node._data.with_grad:
-                _node._data._grad *= 0 
+                _node._data.grad *= 0 
         self._nodes = {}
 
-
     def topo_sort(self):
+        if not self._need_sort: 
+            return
         topo_nodes = {}
         for key in self._nodes:
             nn = self._nodes[key]
@@ -163,9 +178,34 @@ class comp_graph(object):
                         topo_nodes[out_node._id][1] -= 1
                     del topo_nodes[key]
                     break
-            self._sorted_nodes.append(del_node)
-            
-                    
+            if isinstance(del_node, _operator_node):
+                self._sorted_nodes.append(del_node)
+    
+    @no_record
+    def backward(self):
+        self.topo_sort()
+        sorted_nodes = tuple(reversed(self._sorted_nodes))
+        output = sorted_nodes[0]._outs[0]._data
+        output.grad = np.ones(output.shape, dtype=default_dtype)
+        for op_node in sorted_nodes:
+            inputs = [node._data for node in op_node._ins]
+            output = op_node._outs[0]._data
+            op_type = op_node._op_type
+            for i, input in enumerate(inputs):
+                if input.with_grad:
+                    if input.grad is None:
+                        input.grad = np.zeros(input.shape, dtype=default_dtype)
+                    _backward_calculate(inputs, output, op_type, i)
+
+    @no_record 
+    def forward(self):
+        self.topo_sort()
+        for op_node in self._sorted_nodes:
+            inputs = [node._data for node in op_node._ins]
+            output = op_node._outs[0]._data
+            op_type = op_node._op_type
+            _forward_calculate(inputs, output, op_type)
+
 
 class node(object):
 
@@ -182,17 +222,17 @@ class node(object):
         self._outs.append(node)
         node._ins.append(self)
 
-    @comp_graph.no_record
+    @no_record
     def backward(self):
         raise NotImplemented
 
-    @comp_graph.no_record
+    @no_record
     def forward(self):
         raise NotImplemented
 
 class _data_node(node):
     NODE_COUNTS = 0
-    def __init__(self, data, context: comp_graph = None):
+    def __init__(self, data, with_grad: bool, context: comp_graph = None):
         super().__init__("datanode_{}".format(_data_node.NODE_COUNTS), context)
         self._data = data
         _data_node.NODE_COUNTS += 1
@@ -200,37 +240,38 @@ class _data_node(node):
     def link_to(self, node):
         if not isinstance(node, _operator_node):
             raise RuntimeError("Data node should link to operator node, no node will be added.")
-        # elif len(self._ins) > 0:
-        #     raise RuntimeError('Only one operator conld be link to current data node.')
         else:
             super().link_to(node)
 
-    @comp_graph.no_record
-    def backward(self):
-        # init grad val
-        if self._data.with_grad and self._data._grad is None:
-            self._data._grad = np.zeros_like(self._data)
-        # leaf node
-        if len(self._outs) == 0:
-            if self._data.size != 1:
-                raise TypeError("Only constant could be used to start calculating gradient.")
-            self._data._grad = ones_like(self._data)
-        if len(self._ins) == 0 and not self._data.with_grad:
-            pass
-        # non-leaf node
-        else:
-            # iterate each operator type
-            for op in self._outs:
-                result = op._outs[0]
-                inputs = [node._data for node in op._ins]
-                for idx, node in enumerate(op._ins):
-                    if node._id == self._id:
-                        cal_grad = idx
-                op_type = op.op_type
-                _calculate_gradient(inputs, result._data, op_type, cal_grad)
-        # depth first order
-        for op_node in self._ins:
-            op_node.backward()
+    def __repr__(self) -> str:
+        return "<data_node: Size {}>".format(self._data.shape)
+
+    # @no_record
+    # def backward(self):
+    #     # init grad val
+    #     if self._data.with_grad and self._data.grad is None:
+    #         self._data.grad = np.zeros_like(self._data)
+    #     # leaf node
+    #     if len(self._outs) == 0:
+    #         if self._data.size != 1:
+    #             raise TypeError("Only constant could be used to start calculating gradient.")
+    #         self._data.grad = ones_like(self._data)
+    #     if len(self._ins) == 0 and not self._data.with_grad:
+    #         pass
+    #     # non-leaf node
+    #     else:
+    #         # iterate each operator type
+    #         for op in self._outs:
+    #             result = op._outs[0]
+    #             inputs = [node._data for node in op._ins]
+    #             for idx, node in enumerate(op._ins):
+    #                 if node._id == self._id:
+    #                     cal_grad = idx
+    #             op_type = op.op_type
+    #             _calculate_gradient(inputs, result._data, op_type, cal_grad)
+    #     # depth first order
+    #     for op_node in self._ins:
+    #         op_node.backward()
 
 
 class _operator_node(node):
@@ -253,8 +294,11 @@ class _operator_node(node):
         else:
             super().link_to(node)
 
-    @comp_graph.no_record
-    def backward(self):
-        for data_node in self._ins:
-            data_node.backward()
+    def __repr__(self) -> str:
+        return "<op_node: {}>".format(self._op_type)
+
+    # @no_record
+    # def backward(self):
+    #     for data_node in self._ins:
+    #         data_node.backward()
 

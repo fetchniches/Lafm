@@ -16,16 +16,17 @@ c = lm.array([[2, 3, 1], [4, 1, 2.], [1, 1, 1]], with_grad=True)
 # initialize default graph and starting recording
 graph = lm.comp_graph.get_default_graph()
 # computation process
-d = (a - c) @ b.T
-d = d / lm.array([2])
-d = d * lm.array([1.5])
-result = d.sum()
+with graph:
+    d = (a - c) @ b.T
+    d = d / lm.array([2])
+    d = d * lm.array([1.5])
+    result = d.sum()
 # backward for gradient
 result.backward()
 # print gradient
-print(a._grad)
-print(b._grad)
-print(c._grad)
+print(a.grad)
+print(b.grad)
+print(c.grad)
 ```
 
 Here is a Linear Regression example code:
@@ -35,26 +36,27 @@ import lafm
 import numpy as np
 import matplotlib.pyplot as plt
 
-# generate fake data
-true_weight = np.array([2.2]).reshape(-1, 1)
-true_bias = np.array([3.2])
-linear_gen = lafm.faker.data_gen.Linear(true_weight, true_bias)
+
+gt_weight = np.array([-2.2]).reshape(-1, 1)
+gt_bias = np.array([3.2])
+linear_gen = lafm.faker.data_gen.Linear(gt_weight, gt_bias)
+noiser = lafm.faker.noiser.GaussianNoise(0, 1)
+linear_gen.attach_noiser(noiser)
 Xs, ys = linear_gen.gen(-5, 5, 24)
-# initialize linear regression model
 LR = lafm.linreg.LinearRegressor(dims=1)
 disp_X = np.linspace(-5, 5, 2).reshape(-1, 1)
-# training step
-for epoch, loss in LR.train(Xs, ys, 10, lr=.01):
+plt.ion()
+plt.ylabel('y')
+plt.xlabel('X')
+for epoch, loss in LR.train(Xs, ys, 20, lr=.05):
     disp_y = disp_X @ LR.weight + LR.bias
-    # plotting result
     plt.plot(disp_X, disp_y)
     plt.scatter(Xs, ys, c='orange')
-    plt.ylabel('y')
-    plt.xlabel('X')
     plt.xlim(-5, 5)
-    plt.ylim(-10, 10)
-    plt.title('Epoch {} Loss: {:.2f}'.format(epoch, loss))
-    plt.show()
+    plt.ylim(-15, 15)
+    plt.title('Epoch {}  Loss: {:.2f}'.format(epoch, loss))
+    plt.pause(.5)
+    plt.clf()
 ```
 
 ## Support Operation
@@ -95,13 +97,17 @@ for epoch, loss in LR.train(Xs, ys, 10, lr=.01):
 
 - [ ] topological sorting in forward step
 
+- [ ] architecture reconstruction
+
+- [ ] graph optimization
+
 ## Basic Features
 
 - [x] gradient clear
 
 - [ ] dynamic graph (clear graph in backward step?)
 
-- [ ] static graph
+- [x] static graph
 
 ## Bugs
 
