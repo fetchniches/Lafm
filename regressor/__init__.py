@@ -1,1 +1,1 @@
-from .linreg import *
+from .regression import *

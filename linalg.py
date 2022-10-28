@@ -23,12 +23,6 @@ class Mat(np.ndarray):
 
         self.grad = None
 
-    def backward(self):
-        try:
-            self._node.backward()
-        except AttributeError:
-            raise RuntimeError("Current data has no node linked.")
-
     def norm(self, p): ...
 
 

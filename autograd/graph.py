@@ -126,6 +126,9 @@ class comp_graph(object):
         comp_graph._graph_recording = False
 
     def attach_node(self, op_or_value: Union[Mat, str], is_data: bool = True):
+        """
+        TODO: delete usage of `_node`
+        """
         if is_data:
             if not isinstance(op_or_value, Mat):
                 op_or_value = Mat(op_or_value, with_grad=True)
@@ -246,33 +249,6 @@ class _data_node(node):
     def __repr__(self) -> str:
         return "<data_node: Size {}>".format(self._data.shape)
 
-    # @no_record
-    # def backward(self):
-    #     # init grad val
-    #     if self._data.with_grad and self._data.grad is None:
-    #         self._data.grad = np.zeros_like(self._data)
-    #     # leaf node
-    #     if len(self._outs) == 0:
-    #         if self._data.size != 1:
-    #             raise TypeError("Only constant could be used to start calculating gradient.")
-    #         self._data.grad = ones_like(self._data)
-    #     if len(self._ins) == 0 and not self._data.with_grad:
-    #         pass
-    #     # non-leaf node
-    #     else:
-    #         # iterate each operator type
-    #         for op in self._outs:
-    #             result = op._outs[0]
-    #             inputs = [node._data for node in op._ins]
-    #             for idx, node in enumerate(op._ins):
-    #                 if node._id == self._id:
-    #                     cal_grad = idx
-    #             op_type = op.op_type
-    #             _calculate_gradient(inputs, result._data, op_type, cal_grad)
-    #     # depth first order
-    #     for op_node in self._ins:
-    #         op_node.backward()
-
 
 class _operator_node(node):
     NODE_COUNTS = 0
@@ -296,9 +272,3 @@ class _operator_node(node):
 
     def __repr__(self) -> str:
         return "<op_node: {}>".format(self._op_type)
-
-    # @no_record
-    # def backward(self):
-    #     for data_node in self._ins:
-    #         data_node.backward()
-

@@ -113,6 +113,8 @@ for epoch, loss in LR.train(Xs, ys, 20, lr=.05):
 
 - [ ] elementary function support
 
+- [ ] complete graph part
+
 - [ ] kernel methods
 
 ## Implementation Details
