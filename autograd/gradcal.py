@@ -52,7 +52,11 @@ def _add_grad(input_X: Mat, input_Y: Mat, result_Z: Mat, cal_grad: int):
 def _sub_grad(input_X: Mat, input_Y: Mat, result_Z: Mat, cal_grad: int):
     for index, (inp, sign) in enumerate(zip((input_X, input_Y), (1, -1))):
         if index == cal_grad:
-            inp.grad += sign * result_Z.grad
+            if inp.size != 1:
+                inp.grad += sign * result_Z.grad
+            else:
+                inp.grad += sign * np.sum(result_Z.grad)
+            # inp.grad += sign * result_Z.grad
 
 def _mul_grad(input_X: Mat, input_Y: Mat, result_Z: Mat, cal_grad: int):
     # NOTE: only element-wise multiply is supported.
@@ -60,7 +64,7 @@ def _mul_grad(input_X: Mat, input_Y: Mat, result_Z: Mat, cal_grad: int):
     inputs = (input_X, input_Y)
     for index, inp in enumerate(inputs):
         if inp.size == 1 and index == cal_grad:
-            inp.grad += result_Z.grad.reshape(-1) @ inputs[index-1].reshape(-1).T
+            inp.grad += (result_Z.grad.reshape(-1) @ inputs[index-1].reshape(-1).T)[0, 0] # NOTE: temporary solution
         elif index == cal_grad:
             shape = (*result_Z.shape, *inp.shape)
             gradient = np.zeros(shape, dtype=default_dtype)
@@ -78,7 +82,7 @@ def _div_grad(input_X: Mat, input_Y: Mat, result_Z: Mat, cal_grad: int):
         # one element
         if inp.size == 1 and index == cal_grad:
             vectorize_grad =  (- inputs[index-1] / inp ** 2).reshape(-1, 1)
-            inp.grad += result_Z.grad.reshape(1, -1) @ vectorize_grad
+            inp.grad += (result_Z.grad.reshape(1, -1) @ vectorize_grad)[0, 0] # NOTE: temporary solution
         elif index == cal_grad:
             shape = (*result_Z.shape, *inp.shape)
             gradient = np.zeros(shape, dtype=default_dtype)
@@ -89,7 +93,7 @@ def _div_grad(input_X: Mat, input_Y: Mat, result_Z: Mat, cal_grad: int):
             inp.grad += (result_Z.grad.reshape(1, -1) @ vectorize_grad).reshape(inp.shape)
 
 def _matmul_grad(input_X: Mat, input_Y: Mat, result_Z: Mat, cal_grad: int):
-    # TODO: vector @ matrix
+    # TODO: vector @ matrix, boardcast like (N,) @ (N, M)
     if cal_grad == 0:
         shape = (*result_Z.shape, *input_X.shape)
         grad = np.zeros(shape, dtype=default_dtype)

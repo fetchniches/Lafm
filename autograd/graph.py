@@ -1,7 +1,7 @@
-from typing import List, Mapping, Sequence, Union
+from typing import List, Mapping, Union
 import numpy as np
 
-from ..linalg import ones_like, Mat
+from ..linalg import Mat
 from .gradcal import (
     _backward_calculate, 
     _forward_calculate,
@@ -235,7 +235,7 @@ class node(object):
 
 class _data_node(node):
     NODE_COUNTS = 0
-    def __init__(self, data, with_grad: bool, context: comp_graph = None):
+    def __init__(self, data, context: comp_graph = None):
         super().__init__("datanode_{}".format(_data_node.NODE_COUNTS), context)
         self._data = data
         _data_node.NODE_COUNTS += 1
