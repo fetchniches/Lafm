@@ -3,8 +3,10 @@ import numpy as np
 from functools import reduce
 from operator import mul
 from enum import Enum
+import importlib
 
 from ..linalg import Mat
+
 
 default_dtype = np.float32
 
@@ -18,6 +20,8 @@ class _supported_operator(Enum):
     T = 6
     POW = 7
     ABS = 8
+    RELU = 9
+    SOFTMAX = 10
 
 _operator_mapping = {
     '__add__': _supported_operator.ADD,
@@ -28,7 +32,9 @@ _operator_mapping = {
     'sum': _supported_operator.SUM,
     'T': _supported_operator.T,
     '__pow__': _supported_operator.POW,
-    '__abs__': _supported_operator.ABS
+    '__abs__': _supported_operator.ABS,
+    'relu': _supported_operator.RELU,
+    'softmax': _supported_operator.SOFTMAX
 }
 
 # reverse mapping
@@ -44,10 +50,14 @@ for key, val in _operator_mapping.items():
 def _add_grad(input_X: Mat, input_Y: Mat, result_Z: Mat, cal_grad: int):
     for index, inp in enumerate((input_X, input_Y)):
         if index == cal_grad:
-            if inp.size != 1:
-                inp.grad += result_Z.grad
+            if inp.size != 1: # no tested.
+                if inp.shape != result_Z.shape:
+                    inp.grad += np.sum(result_Z.grad, axis=0)
+                else:
+                    inp.grad += result_Z.grad
             else:
                 inp.grad += np.sum(result_Z.grad)
+
 
 def _sub_grad(input_X: Mat, input_Y: Mat, result_Z: Mat, cal_grad: int):
     for index, (inp, sign) in enumerate(zip((input_X, input_Y), (1, -1))):
@@ -58,6 +68,7 @@ def _sub_grad(input_X: Mat, input_Y: Mat, result_Z: Mat, cal_grad: int):
                 inp.grad += sign * np.sum(result_Z.grad)
             # inp.grad += sign * result_Z.grad
 
+
 def _mul_grad(input_X: Mat, input_Y: Mat, result_Z: Mat, cal_grad: int):
     # NOTE: only element-wise multiply is supported.
     # TODO: element-wise matmul 
@@ -66,50 +77,42 @@ def _mul_grad(input_X: Mat, input_Y: Mat, result_Z: Mat, cal_grad: int):
         if inp.size == 1 and index == cal_grad:
             inp.grad += (result_Z.grad.reshape(-1) @ inputs[index-1].reshape(-1).T)[0, 0] # NOTE: temporary solution
         elif index == cal_grad:
-            shape = (*result_Z.shape, *inp.shape)
-            gradient = np.zeros(shape, dtype=default_dtype)
-            for i in range(inp.shape[0]):
-                for j in range(inp.shape[1]):
-                    gradient[i, j, i, j] = inputs[index-1]
-            vectorize_grad = gradient.reshape(reduce(mul, gradient.shape[:2]), reduce(mul, gradient.shape[2:]))
-            inp.grad += (result_Z.grad.reshape(1, -1) @ vectorize_grad).reshape(inp.shape)
+            gradient = np.zeros(inp.shape, dtype=default_dtype)
+            gradient = inputs[index-1] * result_Z.grad
+            inp.grad += gradient
 
-def _div_grad(input_X: Mat, input_Y: Mat, result_Z: Mat, cal_grad: int):
+
+def _div_grad(input_X: Mat, input_Y: Mat, result_Z: Mat, cal_grad: int, eps: float=1e-5):
     # NOTE: only element-wise division is supported.
     # TODO: element-wise division
     inputs = (input_X, input_Y)
     for index, inp in enumerate(inputs):
         # one element
         if inp.size == 1 and index == cal_grad:
-            vectorize_grad =  (- inputs[index-1] / inp ** 2).reshape(-1, 1)
+            vectorize_grad =  (- inputs[index-1] / (inp ** 2)).reshape(-1, 1)
             inp.grad += (result_Z.grad.reshape(1, -1) @ vectorize_grad)[0, 0] # NOTE: temporary solution
         elif index == cal_grad:
-            shape = (*result_Z.shape, *inp.shape)
-            gradient = np.zeros(shape, dtype=default_dtype)
-            for i in range(inp.shape[0]):
-                for j in range(inp.shape[1]):
-                    gradient[i, j, i, j] = 1 / inputs[index-1]
-            vectorize_grad = gradient.reshape(reduce(mul, gradient.shape[:2]), reduce(mul, gradient.shape[2:]))
-            inp.grad += (result_Z.grad.reshape(1, -1) @ vectorize_grad).reshape(inp.shape)
+            gradient = np.zeros(inp.shape, dtype=default_dtype)
+            gradient = 1 / inputs[index-1] * result_Z.grad
+            inp.grad += gradient
 
-def _matmul_grad(input_X: Mat, input_Y: Mat, result_Z: Mat, cal_grad: int):
+
+def _matmul_grad(input_X, input_Y, result_Z, cal_grad: int):
     # TODO: vector @ matrix, boardcast like (N,) @ (N, M)
     if cal_grad == 0:
-        shape = (*result_Z.shape, *input_X.shape)
-        grad = np.zeros(shape, dtype=default_dtype)
-        for i in range(result_Z.shape[0]):
-            for j in range(result_Z.shape[1]):
-                grad[i, j, i] += input_Y[:, j] 
-        tmp_grad = grad.reshape(reduce(mul, result_Z.shape), reduce(mul, input_X.shape))
-        input_X.grad += (result_Z.grad.reshape(-1) @ tmp_grad).reshape(input_X.shape)
+        flatten_size = reduce(mul, input_X.shape)
+        N = input_Y.shape[0]
+        tmp_grad = np.zeros((flatten_size, ), dtype=np.float)
+        for i in range(flatten_size):
+            tmp_grad[i] = np.dot(input_Y[i % N, :], result_Z.grad[i // N, :])
+        input_X.grad += tmp_grad.reshape(input_X.shape)
     if cal_grad == 1:
-        shape = (*result_Z.shape, *input_Y.shape)
-        grad = np.zeros(shape, dtype=default_dtype)
-        for i in range(result_Z.shape[0]):
-            for j in range(result_Z.shape[1]):
-                grad[i, j, :, j] += input_X[i, :] 
-        tmp_grad = grad.reshape(reduce(mul, result_Z.shape), reduce(mul, input_Y.shape))
-        input_Y.grad += (result_Z.grad.reshape(-1) @ tmp_grad).reshape(input_Y.shape)
+        flatten_size = reduce(mul, input_Y.shape)
+        N = input_X.shape[1]
+        tmp_grad = np.zeros((flatten_size, ), dtype=np.float)
+        for i in range(flatten_size):
+            tmp_grad[i] = np.dot(input_X[:, i % N], result_Z.grad[:, i // N])
+        input_Y.grad += tmp_grad.reshape(input_Y.T.shape).T
 
 def _transpose_grad(input_X: Mat, result_Z: Mat, cal_grad: int):
     if cal_grad == 0:
@@ -119,6 +122,7 @@ def _sum_grad(input_X: Mat, result_Z: Mat, cal_grad: int):
     # NOTE: all dim reduceds
     if cal_grad == 0:
         input_X.grad += np.ones_like(input_X) * result_Z.grad
+
 
 def _pow_grad(input_X: Mat, input_Y: Mat, result_Z: Mat, cal_grad: int):
     if cal_grad == 0:
@@ -133,15 +137,28 @@ def _pow_grad(input_X: Mat, input_Y: Mat, result_Z: Mat, cal_grad: int):
             vectorize_grad = gradient.reshape(reduce(mul, gradient.shape[:2]), reduce(mul, gradient.shape[2:]))
             input_X.grad += (result_Z.grad.reshape(1, -1) @ vectorize_grad).reshape(input_X.shape)
 
+
 def _abs_gard(input_X: Mat, result_Z: Mat, cal_grad: int):
     if cal_grad == 0:
-        shape = (*result_Z.shape, *input_X.shape)
-        gradient = np.zeros(shape, dtype=default_dtype)
-        for i in range(input_X.shape[0]):
-            for j in range(input_X.shape[1]):
-                gradient[i, j, i, j] = 1 if input_X[i, j] > 0 else -1
-        vectorize_grad = gradient.reshape(reduce(mul, gradient.shape[:2]), reduce(mul, gradient.shape[2:]))
-        input_X.grad += (result_Z.grad.reshape(1, -1) @ vectorize_grad).reshape(input_X.shape)
+        gradient = np.sign(input_X) * result_Z.grad
+        input_X.grad += gradient
+
+
+def _relu_grad(input_X: Mat, result_Z: Mat, cal_grad: int):
+    if cal_grad == 0:
+        gradient = (input_X > 0) * result_Z.grad
+        input_X.grad += gradient
+
+def _softmax_grad(input_X: Mat, result_Z: Mat, cal_grad: int):
+    if cal_grad == 0:
+        m, n = input_X.shape
+        gradient = np.zeros((m * n,), dtype=default_dtype)
+        for i in range(m * n):
+            tmp_grad = np.zeros((n,), dtype=default_dtype)
+            tmp_grad = - result_Z[i // n, :] * result_Z[i // n, i % n]
+            tmp_grad[i % n] = result_Z[i // n, i % n] * (1 - result_Z[i // n, i % n])
+            gradient[i] = np.dot(tmp_grad, result_Z.grad[i // n])
+        input_X.grad += gradient.reshape(m, n)
 
 # mapping definition
 
@@ -154,14 +171,21 @@ _op_grad_mapping = {
     _supported_operator.SUM: _sum_grad,
     _supported_operator.T: _transpose_grad,
     _supported_operator.POW: _pow_grad,
-    _supported_operator.ABS: _abs_gard
+    _supported_operator.ABS: _abs_gard,
+    _supported_operator.RELU: _relu_grad,
+    _supported_operator.SOFTMAX: _softmax_grad,
 }
 
 def _backward_calculate(inputs, output, op_type: _supported_operator, cal_grad: int):
     func = _op_grad_mapping[op_type]
     func(*inputs, result_Z=output, cal_grad=cal_grad)
 
+
 def _forward_calculate(inputs: Sequence[Mat], output: Mat, op_type: _supported_operator):
+    # print("forward calculate in", op_type)
+    # for i in inputs:
+    #     print(i.max(), i.min())
+    # print("forward calculate")
     func_name = _reverse_operator_mapping[op_type]
     func = getattr(Mat, func_name)
     output *= 0

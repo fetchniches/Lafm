@@ -15,14 +15,14 @@ from .gradcal import (
 #############################
 
 def _operator_wrapper(op):
-    def _inner(*args):
-        res = op(*args)
+    def _inner(*args, **kwargs):
+        res = op(*args, **kwargs)
         if comp_graph._graph_recording:
             res.with_grad = True
             # create node
             g = comp_graph.get_default_graph()
             operands = [g.attach_node(data, is_data=True) for data in (*args, res)]
-            operator = g.attach_node(op.__name__, is_data=False)
+            operator = g.attach_node(op.__name__, is_data=False, kwargs=kwargs)
             # connect
             for node in operands[:-1]:
                 node.link_to(operator)
@@ -33,7 +33,7 @@ def _operator_wrapper(op):
 
 # TODO: dim args
 def _overload_sum(self, *args, **kwargs):
-    res = super(Mat, self).sum()
+    res = super(Mat, self).sum(*args, **kwargs)
     if comp_graph._graph_recording:
         res.with_grad = True
         graph = comp_graph.get_default_graph()
@@ -61,6 +61,17 @@ def _overload_norm(self, p):
     
     return value
 
+def relu(self):
+    return np.maximum(self, 0)
+
+def softmax(self, axis=1):
+    """TODO: args for op_node"""
+    tmp = self.copy().view(np.ndarray)
+    exp = np.exp(tmp - tmp.max(axis=axis, keepdims=True))
+    res = (exp / np.sum(exp, axis=axis, keepdims=True)).view(Mat)
+    res.with_grad = True
+    return res
+
 
 Mat.__add__ = _operator_wrapper(Mat.__add__)
 Mat.__sub__ = _operator_wrapper(Mat.__sub__)
@@ -72,6 +83,9 @@ Mat.T = property(_overload_T)
 Mat.__pow__ = _operator_wrapper(Mat.__pow__)
 Mat.__abs__ = _operator_wrapper(Mat.__abs__)
 Mat.norm = _overload_norm
+Mat.relu = _operator_wrapper(relu)
+Mat.softmax = _operator_wrapper(softmax)
+
 
 ###############################
 ##### computational graph #####
@@ -125,7 +139,7 @@ class comp_graph(object):
         comp_graph.DEFAULT_GRAPH = comp_graph.ctx_stack.pop()
         comp_graph._graph_recording = False
 
-    def attach_node(self, op_or_value: Union[Mat, str], is_data: bool = True):
+    def attach_node(self, op_or_value: Union[Mat, str], is_data: bool = True, kwargs=None):
         """
         TODO: delete usage of `_node`
         """
@@ -141,7 +155,7 @@ class comp_graph(object):
             op = _operator_mapping.get(op_or_value, None)
             if op is None:
                 raise RuntimeWarning("Operator {} does not support now.".format(op_or_value))
-            node = _operator_node(op, self)
+            node = _operator_node(op, self, kwargs=kwargs)
 
         self._need_sort = True
         # self._nodes.setdefault(node._id, node) attached in _node `__init__`
@@ -158,10 +172,9 @@ class comp_graph(object):
     def clear(self):
         for nname in self._nodes:
             _node = self._nodes[nname]
-            _node._ins.clear()
-            _node._outs.clear()
-            if isinstance(_node, _data_node) and _node._data.with_grad:
-                _node._data.grad *= 0 
+            if isinstance(_node, _data_node):
+                del _node._data._node
+            del _node
         self._nodes = {}
 
     def topo_sort(self):
@@ -210,6 +223,7 @@ class comp_graph(object):
             _forward_calculate(inputs, output, op_type)
 
 
+
 class node(object):
 
     def __init__(self, identifier: str, context: comp_graph):
@@ -220,18 +234,11 @@ class node(object):
             context = comp_graph.get_default_graph()
         self._ctx = context
         self._ctx._nodes.setdefault(identifier, self)
+        
 
     def link_to(self, node):
         self._outs.append(node)
         node._ins.append(self)
-
-    @no_record
-    def backward(self):
-        raise NotImplemented
-
-    @no_record
-    def forward(self):
-        raise NotImplemented
 
 class _data_node(node):
     NODE_COUNTS = 0
@@ -252,7 +259,7 @@ class _data_node(node):
 
 class _operator_node(node):
     NODE_COUNTS = 0
-    def __init__(self, op: _supported_operator, context: comp_graph = None, **kwargs):
+    def __init__(self, op: _supported_operator, context: comp_graph = None, kwargs=None):
         super().__init__("opnode_{}".format(_operator_node.NODE_COUNTS), context)
         self._op_type = op
         self.kwargs = kwargs

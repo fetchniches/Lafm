@@ -25,7 +25,6 @@ class Mat(np.ndarray):
 
     def norm(self, p): ...
 
-
 def mat_wrapper(func):
     def inner(*args, **kwargs):
         mat_kwarg_keys = ["with_grad"]
@@ -47,3 +46,4 @@ ones_like = mat_wrapper(np.ones_like)
 zeros_like = mat_wrapper(np.zeros_like)
 ones = mat_wrapper(np.ones)
 zeros = mat_wrapper(np.zeros)
+randn = mat_wrapper(np.random.randn)

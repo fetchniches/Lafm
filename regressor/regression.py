@@ -11,7 +11,7 @@ class LinearRegressor:
         if weight_init is None:
             weight_init = ones(shape=(dims, 1), dtype=dtype, with_grad=True)
         if bias_init is None:
-            bias_init = ones(shape=(1), dtype=dtype, with_grad=True)
+            bias_init = ones(shape=(1,), dtype=dtype, with_grad=True)
         self.weight = weight_init
         self.bias = bias_init
         self.graph = comp_graph.get_default_graph()

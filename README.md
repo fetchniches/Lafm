@@ -117,6 +117,10 @@ for epoch, loss in LR.train(Xs, ys, 20, lr=.05):
 
 - [ ] kernel methods
 
+## Bugs
+
+- [ ] high dimention matrix multiplication would occupy too much memory. (due to a huge inner matrix `tmp_grad`)
+
 ## Implementation Details
 
 coming soon...
