@@ -2,5 +2,3 @@
 # author: fetchniches
 from .linalg import *
 from .autograd import *
-from .faker import *
-from .regressor import *

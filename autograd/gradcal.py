@@ -2,195 +2,114 @@ from typing import Sequence
 import numpy as np
 from functools import reduce
 from operator import mul
-from enum import Enum
-import importlib
 
 from ..linalg import Mat
 
 
 default_dtype = np.float32
 
-class _supported_operator(Enum):
-    ADD = 0
-    SUB = 1
-    MUL = 2
-    DIV = 3
-    MAT_MUL = 4
-    SUM = 5
-    T = 6
-    POW = 7
-    ABS = 8
-    RELU = 9
-    SOFTMAX = 10
-
-_operator_mapping = {
-    '__add__': _supported_operator.ADD,
-    '__sub__': _supported_operator.SUB,
-    '__mul__': _supported_operator.MUL,
-    '__truediv__': _supported_operator.DIV,
-    '__matmul__': _supported_operator.MAT_MUL,
-    'sum': _supported_operator.SUM,
-    'T': _supported_operator.T,
-    '__pow__': _supported_operator.POW,
-    '__abs__': _supported_operator.ABS,
-    'relu': _supported_operator.RELU,
-    'softmax': _supported_operator.SOFTMAX
-}
-
-# reverse mapping
-
-_reverse_operator_mapping = {}
-for key, val in _operator_mapping.items():
-    _reverse_operator_mapping.setdefault(val, key)
 
 ################################
 ###### backward calculate ######
 ################################
 
-def _add_grad(input_X: Mat, input_Y: Mat, result_Z: Mat, cal_grad: int):
-    for index, inp in enumerate((input_X, input_Y)):
-        if index == cal_grad:
-            if inp.size != 1: # no tested.
-                if inp.shape != result_Z.shape:
-                    inp.grad += np.sum(result_Z.grad, axis=0)
-                else:
-                    inp.grad += result_Z.grad
-            else:
-                inp.grad += np.sum(result_Z.grad)
+def _gen_elem_grad(elem_wise_grad):
+    def _elem_grad(input_X: Mat, result_Z: Mat, cal_grad: int, **kwargs):
+        input_X.grad += elem_wise_grad(input_X) * result_Z.grad
+
+    return _elem_grad
+
+def _add_grad(input_X: Mat, input_Y: Mat, result_Z: Mat, cal_grad: int, **kwargs):
+    inp = [input_X, input_Y]
+    inp[cal_grad].grad += result_Z.grad
 
 
-def _sub_grad(input_X: Mat, input_Y: Mat, result_Z: Mat, cal_grad: int):
-    for index, (inp, sign) in enumerate(zip((input_X, input_Y), (1, -1))):
-        if index == cal_grad:
-            if inp.size != 1:
-                inp.grad += sign * result_Z.grad
-            else:
-                inp.grad += sign * np.sum(result_Z.grad)
-            # inp.grad += sign * result_Z.grad
+def _sub_grad(input_X: Mat, input_Y: Mat, result_Z: Mat, cal_grad: int, **kwargs):
+    inp = [input_X, input_Y]
+    inp[cal_grad].grad += result_Z.grad * (-1) ** cal_grad
 
 
-def _mul_grad(input_X: Mat, input_Y: Mat, result_Z: Mat, cal_grad: int):
-    # NOTE: only element-wise multiply is supported.
-    # TODO: element-wise matmul 
-    inputs = (input_X, input_Y)
-    for index, inp in enumerate(inputs):
-        if inp.size == 1 and index == cal_grad:
-            inp.grad += (result_Z.grad.reshape(-1) @ inputs[index-1].reshape(-1).T)[0, 0] # NOTE: temporary solution
-        elif index == cal_grad:
-            gradient = np.zeros(inp.shape, dtype=default_dtype)
-            gradient = inputs[index-1] * result_Z.grad
-            inp.grad += gradient
+def _mul_grad(input_X: Mat, input_Y: Mat, result_Z: Mat, cal_grad: int, **kwargs):
+    inp = [input_X, input_Y]
+    inp[cal_grad].grad += result_Z.grad * inp[1 - cal_grad]
 
 
-def _div_grad(input_X: Mat, input_Y: Mat, result_Z: Mat, cal_grad: int, eps: float=1e-5):
-    # NOTE: only element-wise division is supported.
-    # TODO: element-wise division
-    inputs = (input_X, input_Y)
-    for index, inp in enumerate(inputs):
-        # one element
-        if inp.size == 1 and index == cal_grad:
-            vectorize_grad =  (- inputs[index-1] / (inp ** 2)).reshape(-1, 1)
-            inp.grad += (result_Z.grad.reshape(1, -1) @ vectorize_grad)[0, 0] # NOTE: temporary solution
-        elif index == cal_grad:
-            gradient = np.zeros(inp.shape, dtype=default_dtype)
-            gradient = 1 / inputs[index-1] * result_Z.grad
-            inp.grad += gradient
+def _div_grad(input_X: Mat, input_Y: Mat, result_Z: Mat, cal_grad: int, **kwargs):
+    if 0 == cal_grad:
+        input_X.grad += result_Z.grad / input_Y
+    elif 1 == cal_grad:
+        input_Y.grad += - result_Z.grad * input_X / (input_Y ** 2)
 
 
-def _matmul_grad(input_X, input_Y, result_Z, cal_grad: int):
-    # TODO: vector @ matrix, boardcast like (N,) @ (N, M)
+def _matmul_grad(input_X, input_Y, result_Z, cal_grad: int, **kwargs):
     if cal_grad == 0:
-        flatten_size = reduce(mul, input_X.shape)
-        N = input_Y.shape[0]
-        tmp_grad = np.zeros((flatten_size, ), dtype=np.float)
-        for i in range(flatten_size):
-            tmp_grad[i] = np.dot(input_Y[i % N, :], result_Z.grad[i // N, :])
-        input_X.grad += tmp_grad.reshape(input_X.shape)
+        input_X.grad += (input_Y @ result_Z.grad.T).T
     if cal_grad == 1:
-        flatten_size = reduce(mul, input_Y.shape)
-        N = input_X.shape[1]
-        tmp_grad = np.zeros((flatten_size, ), dtype=np.float)
-        for i in range(flatten_size):
-            tmp_grad[i] = np.dot(input_X[:, i % N], result_Z.grad[:, i // N])
-        input_Y.grad += tmp_grad.reshape(input_Y.T.shape).T
+        input_Y.grad += input_X.T @ result_Z.grad
 
-def _transpose_grad(input_X: Mat, result_Z: Mat, cal_grad: int):
+def _transpose_grad(input_X: Mat, result_Z: Mat, cal_grad: int, **kwargs):
     if cal_grad == 0:
         input_X.grad += result_Z.grad.transpose()
 
-def _sum_grad(input_X: Mat, result_Z: Mat, cal_grad: int):
-    # NOTE: all dim reduceds
+def _getitem_grad(input_X: Mat, result_Z: Mat, cal_grad: int, **kwargs):
     if cal_grad == 0:
-        input_X.grad += np.ones_like(input_X) * result_Z.grad
+        slices = kwargs['slices']
+        input_X.grad[slices] += result_Z.grad
 
-
-def _pow_grad(input_X: Mat, input_Y: Mat, result_Z: Mat, cal_grad: int):
+def _repeat_grad(input_X: Mat, result_Z: Mat, cal_grad: int, **kwargs):
     if cal_grad == 0:
-        if input_X.size == 1:
-            input_X.grad += input_Y * input_X ** (input_Y - 1)
-        else:
-            shape = (*result_Z.shape, *input_X.shape)
-            gradient = np.zeros(shape, dtype=default_dtype)
-            for i in range(input_X.shape[0]):
-                for j in range(input_X.shape[1]):
-                    gradient[i, j, i, j] = input_Y * input_X[i, j] ** (input_Y - 1)
-            vectorize_grad = gradient.reshape(reduce(mul, gradient.shape[:2]), reduce(mul, gradient.shape[2:]))
-            input_X.grad += (result_Z.grad.reshape(1, -1) @ vectorize_grad).reshape(input_X.shape)
+        axis = kwargs['axis']
+        input_X.grad += np.sum(result_Z.grad, axis=axis).reshape(input_X.grad.shape)
 
-
-def _abs_gard(input_X: Mat, result_Z: Mat, cal_grad: int):
+def _pow_grad(input_X: Mat, input_Y: Mat, result_Z: Mat, cal_grad: int, **kwargs):
     if cal_grad == 0:
-        gradient = np.sign(input_X) * result_Z.grad
-        input_X.grad += gradient
+        input_X.grad += result_Z.grad * input_Y * input_X ** (input_Y - Mat(1).reshape(1,))
 
-
-def _relu_grad(input_X: Mat, result_Z: Mat, cal_grad: int):
+def _reshape_grad(input_X: Mat, result_Z: Mat, cal_grad: int, **kwargs):
     if cal_grad == 0:
-        gradient = (input_X > 0) * result_Z.grad
-        input_X.grad += gradient
+        input_X.grad += result_Z.grad.reshape(input_X.shape)
 
-def _softmax_grad(input_X: Mat, result_Z: Mat, cal_grad: int):
-    if cal_grad == 0:
-        m, n = input_X.shape
-        gradient = np.zeros((m * n,), dtype=default_dtype)
-        for i in range(m * n):
-            tmp_grad = np.zeros((n,), dtype=default_dtype)
-            tmp_grad = - result_Z[i // n, :] * result_Z[i // n, i % n]
-            tmp_grad[i % n] = result_Z[i // n, i % n] * (1 - result_Z[i // n, i % n])
-            gradient[i] = np.dot(tmp_grad, result_Z.grad[i // n])
-        input_X.grad += gradient.reshape(m, n)
 
-# mapping definition
+_abs_grad = _gen_elem_grad(lambda x: np.sign(x))
+_relu_grad = _gen_elem_grad(lambda x: np.where(x > 0, 1, 0))
+_exp_grad = _gen_elem_grad(lambda x: np.exp(x))
+_log_grad = _gen_elem_grad(lambda x: 1 / x)
+_neg_grad = _gen_elem_grad(lambda x: -1)
 
 _op_grad_mapping = {
-    _supported_operator.ADD: _add_grad,
-    _supported_operator.SUB: _sub_grad,
-    _supported_operator.MUL: _mul_grad,
-    _supported_operator.DIV: _div_grad,
-    _supported_operator.MAT_MUL: _matmul_grad,
-    _supported_operator.SUM: _sum_grad,
-    _supported_operator.T: _transpose_grad,
-    _supported_operator.POW: _pow_grad,
-    _supported_operator.ABS: _abs_gard,
-    _supported_operator.RELU: _relu_grad,
-    _supported_operator.SOFTMAX: _softmax_grad,
+    '__add__': _add_grad,
+    '__sub__': _sub_grad,
+    '__mul__': _mul_grad,
+    '__truediv__': _div_grad,
+    '__matmul__': _matmul_grad,
+    'T': _transpose_grad,
+    '__getitem__': _getitem_grad,
+    'repeat': _repeat_grad,
+    'reshape': _reshape_grad,
+    
+    '__pow__': _pow_grad,
+    '__abs__': _abs_grad,
+    'relu': _relu_grad,
+    'exp': _exp_grad,
+    'log': _log_grad,
+    '__neg__': _neg_grad,
+    
 }
 
-def _backward_calculate(inputs, output, op_type: _supported_operator, cal_grad: int):
-    func = _op_grad_mapping[op_type]
-    func(*inputs, result_Z=output, cal_grad=cal_grad)
+def _backward_calculate(inputs, output, op_node, cal_grad: int):
+    func = _op_grad_mapping[op_node.op_type]
+    if op_node.op_type == 'reshape':
+        func(inputs[0], output, cal_grad=cal_grad, **op_node.kwargs)
+    else:
+        func(*inputs, result_Z=output, cal_grad=cal_grad, **op_node.kwargs)
 
 
-def _forward_calculate(inputs: Sequence[Mat], output: Mat, op_type: _supported_operator):
-    # print("forward calculate in", op_type)
-    # for i in inputs:
-    #     print(i.max(), i.min())
-    # print("forward calculate")
-    func_name = _reverse_operator_mapping[op_type]
-    func = getattr(Mat, func_name)
+
+def _forward_calculate(inputs: Sequence[Mat], output: Mat, op_node):
+    func = getattr(Mat, op_node.op_type)
     output *= 0
     try:
-        output += func(*inputs)
-    # property object
+        output += func(*inputs, **op_node.kwargs)
     except TypeError:
-        output += getattr(inputs[0], func_name)
+        output += getattr(inputs[0], op_node.op_type)
+

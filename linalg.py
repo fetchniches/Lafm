@@ -23,6 +23,12 @@ class Mat(np.ndarray):
 
         self.grad = None
 
+    # def __str__(self) -> str:
+    #     return "Mat(shape: {}, id: {}, with_grad: {})".format(self.shape, id(self), self.with_grad)
+
+    # def __repr__(self) -> str:
+    #     return self.__str__()
+
     def norm(self, p): ...
 
 def mat_wrapper(func):
