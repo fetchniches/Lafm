@@ -65,19 +65,19 @@ for epoch, loss in LR.train(Xs, ys, 20, lr=.05):
 
 - [x] subtraction
 
-- [x] multiply (element-wise)
+- [x] multiply (boardcast)
 
-- [x] division (element-wise)
+- [x] division (boardcast)
 
-- [ ] multiply (boardcast)
+- [x] multiply (boardcast)
 
-- [ ] division (boardcast)
+- [x] division (boardcast)
 
 - [x] matrix multiply
 
 - [x] sum (reduce all dimension)
 
-- [ ] elementary function
+- [x] elementary function
 
 - [ ] in-place operation
 
@@ -119,7 +119,7 @@ for epoch, loss in LR.train(Xs, ys, 20, lr=.05):
 
 ## Bugs
 
-- [ ] high dimention matrix multiplication would occupy too much memory. (due to a huge inner matrix `tmp_grad`)
+- [x] high dimention matrix multiplication would occupy too much memory. (due to a huge inner matrix `tmp_grad`)
 
 ## Implementation Details
 
