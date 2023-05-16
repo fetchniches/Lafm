@@ -7,6 +7,7 @@
 Here is a test code for autograd below:
 
 ```python
+# OLD VERSION, WON'T WORK
 import lafm as lm
 
 # creating array with gradient
@@ -89,11 +90,9 @@ for epoch, loss in LR.train(Xs, ys, 20, lr=.05):
 
 ## Optimization
 
-- [x] topological sorting for computational graph (not tested yet)
+- [x] topological sorting for computational graph
 
-- [ ] cleaning non-leaf node's gradient
-
-- [ ] computational boardcast
+- [x] computational boardcast
 
 - [ ] topological sorting in forward step
 
