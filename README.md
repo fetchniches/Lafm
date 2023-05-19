@@ -1,5 +1,7 @@
 # LAFM
 
+[English Version](./README-en.md)
+
 **L**ow-performance **A**utograd **F**ramework for **M**achine learning algorithm. **Lafm**使用`numpy`作为后端，所有矩阵计算都由它完成。
 
 ## 代码示例
