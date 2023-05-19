@@ -259,10 +259,10 @@ def _div_grad(input_X: Mat, input_Y: Mat, result_Z: Mat, cal_grad: int, **kwargs
 ```math
 \frac{\partial \mathbf{C}}{\partial \mathbf{A}}=
 \begin{bmatrix}
-    \mathbf{M} & \bold{0}_{n\times k} & \cdots &  \bold{0}_{n\times k} \\
-     \bold{0}_{n\times k} & \mathbf{M} & \cdots &  \bold{0}_{n\times k} \\
+    \mathbf{M} & 0_{n\times k} & \cdots &  0_{n\times k} \\
+     0_{n\times k} & \mathbf{M} & \cdots &  0_{n\times k} \\
     \vdots & \vdots & \ddots & \vdots \\
-     \bold{0}_{n\times k} &  \bold{0}_{n\times k} & \cdots & \mathbf{M}
+     0_{n\times k} &  0_{n\times k} & \cdots & \mathbf{M}
 \end{bmatrix}_{mn\times mk}
 ```
 ​	此时计算 $\frac{\partial f(\mathbf{C})}{\partial \mathbf{C}}\cdot\frac{\partial \mathbf{C}}{\partial \mathbf{A}}$ ，记 $\frac{\partial f(\mathbf{C})}{\partial \mathbf{C}}[i,j]=f_{ij}$ 有如下：
@@ -271,10 +271,10 @@ def _div_grad(input_X: Mat, input_Y: Mat, result_Z: Mat, cal_grad: int, **kwargs
     f_{00} & f_{01} & \cdots & f_{mn} 
 \end{bmatrix} \cdot
 \begin{bmatrix}
-    \mathbf{M} &  \bold{0}_{n\times k} & \cdots &  \bold{0}_{n\times k} \\
-     \bold{0}_{n\times k} & \mathbf{M} & \cdots &  \bold{0}_{n\times k} \\
+    \mathbf{M} &  0_{n\times k} & \cdots &  0_{n\times k} \\
+     0_{n\times k} & \mathbf{M} & \cdots &  0_{n\times k} \\
     \vdots & \vdots & \ddots & \vdots \\
-     \bold{0}_{n\times k} &  \bold{0}_{n\times k} & \cdots & \mathbf{M}
+     0_{n\times k} &  0_{n\times k} & \cdots & \mathbf{M}
 \end{bmatrix} =
 \mathbf{N}_{1\times mk}
 ```
