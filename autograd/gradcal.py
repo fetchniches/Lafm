@@ -43,18 +43,20 @@ def _div_grad(input_X: Mat, input_Y: Mat, result_Z: Mat, cal_grad: int, **kwargs
 
 def _matmul_grad(input_X, input_Y, result_Z, cal_grad: int, **kwargs):
     if cal_grad == 0:
-        input_X.grad += (input_Y @ result_Z.grad.T).T
+        input_X.grad += result_Z.grad @ input_Y.T
     if cal_grad == 1:
         input_Y.grad += input_X.T @ result_Z.grad
 
 def _transpose_grad(input_X: Mat, result_Z: Mat, cal_grad: int, **kwargs):
     if cal_grad == 0:
-        input_X.grad += result_Z.grad.transpose()
+        input_X.grad += result_Z.grad.T
 
 def _getitem_grad(input_X: Mat, result_Z: Mat, cal_grad: int, **kwargs):
     if cal_grad == 0:
         slices = kwargs['slices']
         input_X.grad[slices] += result_Z.grad
+    else:
+        raise NotImplementedError
 
 def _repeat_grad(input_X: Mat, result_Z: Mat, cal_grad: int, **kwargs):
     if cal_grad == 0:

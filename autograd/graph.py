@@ -38,8 +38,6 @@ def check_args_with_grad(args):
 def _operator_wrapper(op):
     def _inner(*args, **kwargs):
         res = op(*args, **kwargs)
-        # if op.__name__ == "__truediv__":
-        #     print(args)
         if comp_graph._graph_recording:
             res.with_grad = check_args_with_grad(args)
             # create node
@@ -50,7 +48,6 @@ def _operator_wrapper(op):
             for node in operands[:-1]:
                 node.link_to(operator)
             operator.link_to(operands[-1])
-
         return res
     _inner.__name__ = op.__name__
     return _inner
@@ -213,7 +210,7 @@ def softmax(self, axis=1):
 def sigmoid(self):
     return ones_like(self) / (ones_like(self) + (-self).exp())
 
-def dropout(self, rate=0.1):
+def dropout(self, rate: float = 0.1):
     one_mat = ones_like(self)
     for row in range(one_mat.shape[0]):
         one_mat[row] = np.random.binomial(1, 1-rate, size=one_mat.shape[1])
