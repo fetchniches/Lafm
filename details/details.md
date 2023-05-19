@@ -59,24 +59,24 @@ def _getitem_grad(input_X: Mat, result_Z: Mat, cal_grad: int, **kwargs):
 #### 矩阵逐元素四则运算
 
 ​	这一类计算要求参与计算的两个操作数矩阵均有相同的维度与形状，其数学公式可以按照矩阵逐元素求导的定义出发，以矩阵加法为例，我们构建一个完整的计算流程，终端结点为常数,设：
-$$
+```
 \mathbf{A}\in \mathbb{R}^{m\times n},\ \mathbf{B}\in \mathbb{R}^{m\times n},\ \mathbf{C}\in \mathbb{R}^{m\times n}
-$$
+```
 ​	计算过程如下：
-$$
+```
 \mathbf{A}+\mathbf{B}=\mathbf{C}\\ f(\mathbf{C})\in \mathbb{R}
-$$
+```
 ​	假设我们需要求出矩阵 $\mathbf{A}$ 的梯度，即计算 $\frac{\partial f(\mathbf{C})}{\partial \mathbf{A}}$ ，根据链式求导有：
-$$
+```
 \frac{\partial f(\mathbf{C})}{\partial \mathbf{A}}=\frac{\partial f(\mathbf{C})}{\partial \mathbf{C}}\cdot\frac{\partial \mathbf{C}}{\partial \mathbf{A}},\\
 \frac{\partial f(\mathbf{C})}{\partial \mathbf{C}}\in\mathbb{R}^{m\times n},\ \frac{\partial \mathbf{C}}{\partial \mathbf{A}}\in\mathbb{R}^{m\times n\times m\times n}
-$$
+```
 ​	显然根据反向传播的过程，在计算加法梯度这一步 $\frac{\partial f(\mathbf{C})}{\partial \mathbf{C}}$ 已经计算完毕，因此这一步的关键在于如何计算 $\frac{\partial \mathbf{C}}{\partial \mathbf{A}}\in\mathbb{R}^{m\times n\times m\times n}$ 。首先，我们可以将这一矩阵以如下方式表达：
-$$
+```
 \frac{\partial \mathbf{C}}{\partial \mathbf{A}}[i, j]=\frac{\partial \mathbf{C}[i, j]}{\partial \mathbf{A}}\in\mathbb{R}^{m\times n}
-$$
+```
 ​	 这一公式的含义也就是对于矩阵 $\mathbf{C}$ 中第 $[i,j]$ 个元素对矩阵 $\mathbf{A}$ 求导，这一结果是显而易见的，因为矩阵 $\mathbf{A}$ 中仅有第 $[i,j]$ 个元素参与了矩阵 $\mathbf{C}[i,j]$ 的计算，因此计算结果将是一个除了第 $[i,j]$ 个元素为 $1$ 以外全为 $0$ 的矩阵。依据这一结论我们可以计算出 $\frac{\partial \mathbf{C}}{\partial \mathbf{A}}$ 结果：
-$$
+```math
 \begin{bmatrix}
 \begin{bmatrix}
     1 & 0 & \cdots & 0 \\
@@ -137,7 +137,7 @@ $$
     0 & 0 & \cdots & 1
 \end{bmatrix}
 \end{bmatrix}
-$$
+```
 ​	这是一个大小为 $m\times n$ 的矩阵，其中每个元素也是一个大小为 $m\times n$ 的矩阵。但是为了能够和项 $\frac{\partial f(\mathbf{C})}{\partial \mathbf{C}}$ 进行计算，我们需要先对其元素进行向量化，也就是将每个矩阵元素压缩成 $1\times mn$ 的元素，并将这些元素按行进行排列，即最终得到一个 $mn\times mn$ 的矩阵，根据简单的推导可以知道这一矩阵为一个单位矩阵 $\mathbf{I}_{mn\times mn}$ ，同时对项 $\frac{\partial f(\mathbf{C})}{\partial \mathbf{C}}$ 也需要进行向量化，得到一个 $1\times mn$ 的矩阵。此时可以开始计算：$\frac{\partial f(\mathbf{C})}{\partial \mathbf{C}}\cdot\frac{\partial \mathbf{C}}{\partial \mathbf{{A}}}$，由于两个元素中后者是单位矩阵，因此将两者相乘可以得到一个与原矩阵一致的结果，由于 $\mathbf{A}$ 本身是一个维度为 $m\times n$ 的矩阵，因此将 $1\times mn$ 的矩阵展开后即刻得到 $\mathbf{A}$ 的梯度，在这里也就是矩阵 $\frac{\partial f(\mathbf{C})}{\partial \mathbf{C}}$ 本身，因此最后的代码实现如下：
 
 ```python
@@ -169,24 +169,24 @@ def _div_grad(input_X: Mat, input_Y: Mat, result_Z: Mat, cal_grad: int, **kwargs
 #### 矩阵乘法
 
 ​	矩阵乘法的求导计算相比逐元素相乘更为复杂一些，但原理一致，设：
-$$
+```math
 \mathbf{A}\in \mathbb{R}^{m\times k},\ \mathbf{B}\in \mathbb{R}^{k\times n},\ \mathbf{C}\in \mathbb{R}^{m\times n}
-$$
+```
 ​	计算过程如下：
-$$
+```math
 \mathbf{A}\times \mathbf{B}=\mathbf{C}\\ f(\mathbf{C})\in \mathbb{R}
-$$
+```
 ​	与前一节相似，假设我们需要求出矩阵 $\mathbf{A}$ 的梯度，即计算 $\frac{\partial f(\mathbf{C})}{\partial \mathbf{A}}$ ，根据链式求导有：
-$$
+```math
 \frac{\partial f(\mathbf{C})}{\partial \mathbf{A}}=\frac{\partial f(\mathbf{C})}{\partial \mathbf{C}}\cdot\frac{\partial \mathbf{C}}{\partial \mathbf{A}},\\
 \frac{\partial f(\mathbf{C})}{\partial \mathbf{C}}\in\mathbb{R}^{m\times n},\ \frac{\partial \mathbf{C}}{\partial \mathbf{A}}\in\mathbb{R}^{m\times n\times m\times k}
-$$
+```
 ​	思路相似，首先列出项 $\frac{\partial \mathbf{C}}{\partial \mathbf{A}}\in\mathbb{R}^{m\times n\times m\times k}$ ，我们可以将其中的元素看作 $\frac{\partial \mathbf{C}}{\partial \mathbf{A}}[i, j]=\frac{\partial \mathbf{C}[i, j]}{\partial \mathbf{A}}\in\mathbb{R}^{m\times k}$，要写出其中的项，需要先回忆矩阵乘法的定义，思考元素 $\mathbf{C}[i,j]$ 如何计算得到的：
-$$
+```math
 \mathbf{C}[i,j]=\mathbf{A}[i, :] \times \mathbf{B}[:,j]
-$$
+```
 ​	因此我们可以很容易的知道 $\frac{\partial \mathbf{C}[i, j]}{\partial \mathbf{A}}$ 对应的矩阵中仅在第 $i$ 行有元素（因为 $\mathbf{A}$ 中仅有第 $i$ 行参与了计算），其对应的元素为 $\mathbf{B}[:,j]^\intercal$，因此我们就可以利用分块矩阵的方式写出  $\frac{\partial \mathbf{C}}{\partial \mathbf{A}}\in\mathbb{R}^{m\times n\times m\times k}$：
-$$
+```math
 \begin{bmatrix}
     \begin{bmatrix}
     \mathbf{B}[:, 0]^\intercal \\
@@ -244,9 +244,9 @@ $$
     \mathbf{B}[:, n-1]^\intercal
 	\end{bmatrix}_{m\times k}
 \end{bmatrix}_{m\times n}
-$$
+```
 ​	同理，利用矩阵向量化，我们可以获得一个 $mn\times mk$ 的矩阵，为了方便表示，首先设：
-$$
+```math
 \mathbf{M} = 
 \begin{bmatrix}
     \mathbf{B}[:, 0]^\intercal  \\
@@ -254,9 +254,9 @@ $$
     \vdots  \\
     \mathbf{B}[:, n-1]^\intercal
 \end{bmatrix}_{n\times k}
-$$
+```
 ​	随后有：
-$$
+```math
 \frac{\partial \mathbf{C}}{\partial \mathbf{A}}=
 \begin{bmatrix}
     \mathbf{M} & \bold 0_{n\times k} & \cdots & \bold 0_{n\times k} \\
@@ -264,9 +264,9 @@ $$
     \vdots & \vdots & \ddots & \vdots \\
     \bold 0_{n\times k} & \bold 0_{n\times k} & \cdots & \mathbf{M}
 \end{bmatrix}_{mn\times mk}
-$$
+```
 ​	此时计算 $\frac{\partial f(\mathbf{C})}{\partial \mathbf{C}}\cdot\frac{\partial \mathbf{C}}{\partial \mathbf{A}}$ ，记 $\frac{\partial f(\mathbf{C})}{\partial \mathbf{C}}[i,j]=f_{ij}$ 有如下：
-$$
+```math
 \begin{bmatrix}
     f_{00} & f_{01} & \cdots & f_{mn} 
 \end{bmatrix} \cdot
@@ -277,15 +277,15 @@ $$
     \bold 0_{n\times k} & \bold 0_{n\times k} & \cdots & \mathbf{M}
 \end{bmatrix} =
 \mathbf{N}_{1\times mk}
-$$
+```
 ​	通过逐一带入计算可以找到如下规律：
-$$
+```math
 \mathbf{N}[i*j] =\frac{\partial f(\mathbf{C})}{\partial \mathbf{C}}[i,:]\times  \mathbf{B}[j, :]=\frac{\partial f(\mathbf{C})}{\partial \mathbf{C}}[i,:]\times \mathbf{B}[:, j]^\intercal
-$$
+```
 ​	根据观察可以得到其矩阵乘法的形式：
-$$
+```math
 \mathbf{N}_{m\times k}=\frac{\partial f(\mathbf{C})}{\partial \mathbf{A}}=\frac{\partial f(\mathbf{C})}{\partial \mathbf{C}}\times \mathbf{B}^\intercal
-$$
+```
 ​	同理可得 $\frac{\partial f(\mathbf{C})}{\partial \mathbf{B}}=\mathbf{A}^\intercal\times \frac{\partial f(\mathbf{C})}{\partial \mathbf{C}}$，因此最终实现的梯度运算代码如下：
 
 ```python
@@ -370,9 +370,9 @@ _neg_grad = _gen_elem_grad(lambda x: -1)
 ####  Sigmoid
 
 ​	Sigmoid函数具有单增以及反函数单增等性质，它可将变量映射到0,1之间，其对应的函数表达式如下：
-$$
+```
 \sigma(x) = \frac{1}{1 + e^{-x}}
-$$
+```
 ​	借由上述的基本算子，我们可以实现代码如下：
 
 ```python
@@ -387,9 +387,9 @@ def sigmoid(self):
 #### Softmax
 
 ​	softmax函数通常用于将一个包含多个元素的向量转换为概率分布。它通过对每个向量元素进行指数运算，并将每个元素除以所有元素的和来得到一个概率向量，使得每个元素都在0到1之间且总和为1。其函数表达式如下：
-$$
+```math
 \operatorname{softmax}(\mathbf{x})_i = \frac{e^{x_i}}{\sum_{j=1}^ne^{x_j}}, \quad i=1,\ldots,n
-$$
+```
 ​	通过基本算子等得到的代码如下，由于 `numpy.exp` 函数支持的输入定义域较有限，因此采用了对指数调整的策略防止出现数值上溢：
 
 ```python
@@ -406,13 +406,13 @@ def softmax(self, axis=1):
 #### Cross Entropy
 
 ​	Cross Entropy（交叉熵）函数是一种用于衡量两个概率分布之间差异性的函数。假设有两个概率分布 $p(x)$ 和 $q(x)$，其中 $p(x)$ 表示真实分布，$q(x)$ 表示模型预测的分布。它们的交叉熵可以表示为：
-$$
+```math
 H(p, q) = -\sum_{x} p(x) \log q(x) 
-$$
+```
 ​	交叉熵函数的离散形式为：
-$$
+```math
 H(p, q) = -\sum_{i=1}^{n} p_i \log q_i
-$$
+```
 ​	当数据标签为 one-hot 向量时，交叉熵的函数实现可以简化如下：
 
 ```python
